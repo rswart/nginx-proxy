@@ -1,23 +1,30 @@
-{{ range $host, $containers := groupBy $ "Env.VIRTUAL_HOST" }}
-upstream {{ $host }} {
+{{ range $host, $containersByHost := groupBy $ "Env.VIRTUAL_HOST" }}
 
-{{ range $index, $value := $containers }}
-	{{ with $address := index $value.Addresses 0 }}
-	server {{ $value.Gateway }}:{{ $address.HostPort }};
-	{{ end }}
+{{ range $cluster, $containers := groupBy $containersByHost "Env.APP_CLUSTER_NAME" }}
+upstream {{ $cluster }} {
+  {{ range $index, $value := $containers }}
+      {{ with $address := index $value.Addresses 0 }}
+      server {{ $address.IP }}:{{ $address.Port }};
+      {{ end }}
+  {{ end }}
 {{ end }}
-
 }
 
 server {
-	gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript;
+        #ssl_certificate /etc/nginx/certs/demo.pem;
+        #ssl_certificate_key /etc/nginx/certs/demo.key;
 
-	server_name {{ $host }};
+        #gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascri
+pt;
+        server_name {{ $host }};
         proxy_buffering off;
-
-	location / {
-	    proxy_pass http://{{ $host }};
-	    include /etc/nginx/proxy_params;
-	}
+  {{ range $cluster, $containers := groupBy $containersByHost "Env.APP_CLUSTER_NAME" }}
+    {{ with $container := index $containers 0 }}
+    location {{ $container.Env.APP_CLUSTER_JUNCTION }} {
+        proxy_pass http://{{ $cluster }};
+        include /etc/nginx/proxy_params;
+    }
+    {{ end }}
+  {{ end }}
 }
 {{ end }}
